@@ -6,7 +6,7 @@
 import os
 import random
 import time
-
+import warnings
 # 3rd party API
 import pickle
 import numpy as np
@@ -24,16 +24,16 @@ from keras.callbacks import ModelCheckpoint, EarlyStopping, CSVLogger, ReduceLRO
 from keras.utils import plot_model
 from matplotlib import pyplot as plt
 
+#To remove warnings from the system
+warnings.simplefilter(action='ignore', category=FutureWarning)
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-# (224, 192, 160, 128, and 96).
+
 # Variables
-# tenho que fazer aquele callback de steps mais pequenos
 path = 'Trashnet'
 pathTrainResult = 'TrainResult'
-combination = 11
 batch_size = 12
 epochs = 500
-WIDTH = 192
+WIDTH = 192 # (224, 192, 160, 128, and 96).
 HEIGHT = WIDTH
 lista_imagens, x, y = [], [], []
 lb = LabelBinarizer()
@@ -60,18 +60,9 @@ for imagePath, category in lista_imagens:
     x.append(image)
     y.append(category)
 
-'''
-for img, cat in lista_imagens:
-    imag = Image.open(img)
-    imgSmall = imag.resize((WIDTH,HEIGHT))
-    imgSmall = img_to_array(imgSmall)
-    x.append(imgSmall)
-    y.append(cat)
-'''
 
 end = time.time()
 print('Resized images in {0} seconds'.format(round(end-start,0)))
-
 
 # transform multi-class labels to binary labels
 y = np.array(y)
@@ -87,21 +78,16 @@ for i in X_train:
     x_l.append(i.reshape(-1))
 X_train = np.array(x_l)
 X_train.reshape(-1)
-# print(X_train.shape)
-
 
 x_l = []
 for i in X_val:
     x_l.append(i.reshape(-1))
 X_val = np.array(x_l)
-# print(X_val.shape)
-
 
 x_l = []
 for i in X_test:
     x_l.append(i.reshape(-1))
 X_test = np.array(x_l)
-# print(X_test.shape)
 
 
 # Image Standardization
@@ -110,9 +96,6 @@ scaler.fit(X_train)
 X_train = scaler.transform(X_train)
 X_val = scaler.transform(X_val)
 X_test = scaler.transform(X_test)
-# print(X_train.shape)
-# print(X_val.shape)
-# print(X_test.shape)
 print('Standardized images')
 
 # Image Normalization
@@ -121,48 +104,35 @@ scaler.fit(X_train)
 X_train = scaler.transform(X_train)
 X_val = scaler.transform(X_val)
 X_test = scaler.transform(X_test)
-# print(X_train.shape)
-# print(X_val.shape)
-# print(X_test.shape)
 print('Normalized Images')
 
 X_trein = []
 for i in X_train:
     X_trein.append(i.reshape((WIDTH,HEIGHT, 3)))
 X_train = np.array(X_trein)
-# print(X_train.shape)
 
 X_vali = []
 for i in X_val:
     X_vali.append(i.reshape((WIDTH,HEIGHT, 3)))
 X_val = np.array(X_vali)
-# print(X_val.shape)
 
 X_teste = []
 for i in X_test:
     X_teste.append(i.reshape((WIDTH,HEIGHT, 3)))
 X_test = np.array(X_teste)
-# print(X_test.shape)
 
 
 print('Defining classifier')
 mobilenet = MobileNetV2(input_shape=(WIDTH, HEIGHT, 3), include_top=False, weights='imagenet')
-# x =  mobilenet.layers[-6].output
 
-#To test
 x = mobilenet.output
 x = GlobalAveragePooling2D()(x)
 
-#To Test
 x=Dense(1024,activation='relu')(x) #we add dense layers so that the model can learn more complex functions and classify for better results.
 x=Dense(1024,activation='relu')(x) #dense layer 2
 x=Dense(512,activation='relu')(x) #dense layer 3
 
 predictions = Dense(6, activation='softmax')(x)
-'''
-x =  mobilenet.layers[-2].output
-predictions = Dense(7, activation='softmax')(x)
-'''
 classifier = Model(inputs= mobilenet.input, outputs=predictions)
 classifier.compile(optimizer = 'adam', loss = 'categorical_crossentropy', metrics = ['accuracy'])
 classifier.summary()
@@ -177,21 +147,18 @@ aug = ImageDataGenerator(rotation_range=20, zoom_range=0.15,
 	horizontal_flip=True, fill_mode="nearest")
 
 
-file_name = 'comb_{0}_batch_{1}_shape_{2}'.format(combination, batch_size, WIDTH)
+file_name = 'batch_{0}_shape_{1}'.format(batch_size, WIDTH)
 
 # to save best model
 bestcheckpoint = ModelCheckpoint(pathTrainResult + '/batch_'+ str(batch_size) +'_epochs_'+ str(epochs) +'_shape_'+ str(WIDTH) +'.h5', save_best_only=True, monitor='val_loss', mode='min')
 callback = EarlyStopping(monitor='val_loss', min_delta=0, patience=30, mode='auto')
 csv_logger = CSVLogger('PlotResults/batch_'+ str(batch_size) +'_epochs_'+ str(epochs) +'_shape_'+ str(WIDTH) +'_training.log')
 reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.2, patience=5, min_lr=0.001)
-# fit() should be used for small datasets, loads everything into memory
-# fit_generator() should be used for larger datasets, which loads into memory only small batches of data.
 steps = int( np.ceil(X_train.shape[0] / batch_size) )
 
+# fit() should be used for small datasets, loads everything into memory
+# fit_generator() should be used for larger datasets, which loads into memory only small batches of data.
 H = classifier.fit_generator(aug.flow(X_train, y_train, batch_size=batch_size), validation_data = (X_val, y_val),steps_per_epoch=steps, epochs = epochs, verbose = 1, callbacks=[bestcheckpoint, csv_logger, reduce_lr])
-
-#classifier.save('{0}/batch_{1}_epochs_{2}_shape_{3}_finalclassifier.h5'.format(pathTrainResult, batch_size, epochs, WIDTH))
-#print("Saved model to disk")
 
 # Plot training & validation accuracy values
 plt.figure()
